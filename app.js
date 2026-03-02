@@ -46,7 +46,11 @@ let state = {
   playT: 0,            // current playback time in recording coords
 };
 
-// ─── DOM refs ─────────────────────────────────────────────────────────────────
+// Recording was generated at this canvas size — all x,y are in this coordinate space
+const REC_W = 393;
+const REC_H = 340;
+
+// ─── DOM refs ────────────────────────────────────────────────────────────────
 let canvas, ctx, ballEls = [], fixCross, loadBar, loadLabel, timeLabel,
     trialLabel, memoriseLabel, probeLabel, confirmBtn,
     setupPanel, betweenPanel, donePanel,
@@ -138,10 +142,10 @@ async function loadTrials() {
 
 // ─── DOM builder ─────────────────────────────────────────────────────────────
 function buildDOM() {
-  document.body.style.cssText = `margin:0;padding:0;background:${C.bg};color:#d0e8f0;font-family:'Courier New',monospace;height:100vh;overflow:hidden;user-select:none;-webkit-user-select:none;`;
+  document.body.style.cssText = `color:#d0e8f0;font-family:'Courier New',monospace;user-select:none;-webkit-user-select:none;`;
 
   const root = document.getElementById('app');
-  root.style.cssText = 'display:flex;flex-direction:column;height:100vh;overflow:hidden;';
+  root.style.cssText = 'display:flex;flex-direction:column;height:100%;overflow:hidden;';
 
   // Header
   const hdr = el('div', `padding:7px 14px;border-bottom:1px solid ${C.dim};display:flex;justify-content:space-between;align-items:center;flex-shrink:0;`);
@@ -152,7 +156,7 @@ function buildDOM() {
   trialLabel = document.getElementById('trialLabel');
 
   // Canvas area
-  const canvasWrap = el('div', `position:relative;flex-shrink:0;height:54vh;background:#000;overflow:hidden;touch-action:none;`);
+  const canvasWrap = el('div', `position:relative;flex:1;min-height:0;background:#000;overflow:hidden;touch-action:none;`);
   root.appendChild(canvasWrap);
 
   // Fixation cross
@@ -275,7 +279,9 @@ function launchTrial() {
 function trackFrame(ts) {
   const trial = currentTrial();
   const rec = RECORDINGS[trial.rec_idx];
-  const { w, h, cx, cy } = getDims();
+  // Physics/Bouma math always in recording coordinate space
+  const cx = REC_W / 2, cy = REC_H / 2;
+  const { w, h } = getDims();
   const wallDt = lastTs ? Math.min((ts - lastTs) / 1000, 0.05) : 0.016;
   lastTs = ts;
   const wallEl = (ts - trialStartTs) / 1000;
@@ -550,15 +556,18 @@ function renderBalls(balls, phase) {
 
   balls.forEach((b, i) => {
     const div = ballEls[i];
+    const sb = scalePos(b);   // recording coords → canvas coords
     const isTarget = b.id < N_TARGETS;
     const isSelected = state.selected.has(b.id);
     const isProbe = phase === PH.PROBE;
     const isMemorising = phase === PH.MEMORISE;
+    const { sx } = getDims();
+    const r = Math.max(12, Math.round(BALL_R * sx)); // scale ball radius too
 
-    div.style.left = `${b.x - BALL_R}px`;
-    div.style.top  = `${b.y - BALL_R}px`;
-    div.style.width  = `${BALL_R*2}px`;
-    div.style.height = `${BALL_R*2}px`;
+    div.style.left = `${sb.x - r}px`;
+    div.style.top  = `${sb.y - r}px`;
+    div.style.width  = `${r*2}px`;
+    div.style.height = `${r*2}px`;
     div.style.background = isTarget && isMemorising ? '#001a12' : '#060e14';
     div.style.border = isTarget && isMemorising
       ? `2.5px solid ${C.accent}`
@@ -599,8 +608,18 @@ function toggleSelect(id) {
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
 function getDims() {
-  const w = canvas.clientWidth, h = canvas.clientHeight;
-  return { w, h, cx: w/2, cy: h/2 };
+  const w = canvas.clientWidth || REC_W;
+  const h = canvas.clientHeight || REC_H;
+  // Scale factors from recording space to actual canvas
+  const sx = w / REC_W;
+  const sy = h / REC_H;
+  return { w, h, cx: w/2, cy: h/2, sx, sy };
+}
+
+// Scale a recording-space position to canvas space
+function scalePos(b) {
+  const { sx, sy } = getDims();
+  return { ...b, x: b.x * sx, y: b.y * sy };
 }
 
 function el(tag, css, id='') {

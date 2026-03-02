@@ -12,25 +12,39 @@
   <title>MOT · Load Model</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
-    html, body {
+
+    html {
+      height: 100%;
+      height: -webkit-fill-available;
+    }
+
+    body {
       margin: 0; padding: 0;
       background: #060c10;
-      height: 100%;
+      /* Use dvh (dynamic viewport height) which accounts for Safari address bar.
+         Fall back to -webkit-fill-available for older iOS. */
+      height: 100dvh;
+      height: -webkit-fill-available;
       overflow: hidden;
       -webkit-tap-highlight-color: transparent;
       -webkit-touch-callout: none;
+      position: fixed;
+      width: 100%;
+      /* Safe area insets for notch / home indicator */
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
     }
+
     #app {
-      height: 100vh;
-      height: -webkit-fill-available;
+      height: 100%;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
-    /* Prevent rubber-band scroll on iOS */
-    body { position: fixed; width: 100%; }
+
     input[type=number] { -webkit-appearance: none; appearance: none; }
     input:focus { outline: none; }
-    button { -webkit-appearance: none; }
+    button { -webkit-appearance: none; touch-action: manipulation; }
   </style>
 </head>
 <body>
