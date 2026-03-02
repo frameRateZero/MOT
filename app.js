@@ -519,6 +519,8 @@ function setPhase(ph) {
     probeLabel.style.display = 'block';
     updateProbeLabel();
     fixCross.style.display = 'block';
+    // Re-render balls as tappable — this is what actually enables selection
+    renderBalls(state.balls, PH.PROBE);
   }
   if (ph === PH.BETWEEN) {
     clearBalls();
@@ -581,7 +583,8 @@ function renderBalls(balls, phase) {
     if (isProbe) {
       div.style.pointerEvents = 'auto';
       div.style.cursor = 'pointer';
-      div.ontouchstart = div.onclick = (e) => { e.stopPropagation(); toggleSelect(b.id); };
+      div.onclick = null;
+      div.ontouchstart = (e) => { e.preventDefault(); e.stopPropagation(); toggleSelect(b.id); };
     } else {
       div.style.pointerEvents = 'none';
       div.style.cursor = 'default';
