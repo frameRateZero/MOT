@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="MOT">
+  <meta name="theme-color" content="#060c10">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <title>MOT · Load Model</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      background: #060c10;
+      height: 100%;
+      overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+    }
+    #app {
+      height: 100vh;
+      height: -webkit-fill-available;
+      display: flex;
+      flex-direction: column;
+    }
+    /* Prevent rubber-band scroll on iOS */
+    body { position: fixed; width: 100%; }
+    input[type=number] { -webkit-appearance: none; appearance: none; }
+    input:focus { outline: none; }
+    button { -webkit-appearance: none; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script src="recordings.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
