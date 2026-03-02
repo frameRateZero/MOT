@@ -156,7 +156,7 @@ function buildDOM() {
   trialLabel = document.getElementById('trialLabel');
 
   // Canvas area
-  const canvasWrap = el('div', `position:relative;flex:1;min-height:0;background:#000;overflow:hidden;touch-action:none;`);
+  const canvasWrap = el('div', `position:relative;flex-shrink:0;background:#000;overflow:hidden;touch-action:none;`);
   root.appendChild(canvasWrap);
 
   // Fixation cross
@@ -177,6 +177,14 @@ function buildDOM() {
 
   // Ball container (divs, not canvas — cleaner on iOS)
   canvas = canvasWrap; // canvas is really the wrap div
+
+  function sizeCanvas() {
+    const w = window.innerWidth;
+    canvasWrap.style.width  = w + 'px';
+    canvasWrap.style.height = w + 'px';
+  }
+  sizeCanvas();
+  window.addEventListener('resize', sizeCanvas);
 
   // Load bar
   const loadRow = el('div', `padding:4px 14px;flex-shrink:0;border-bottom:1px solid ${C.dim};display:none;`, 'loadRow');
@@ -260,8 +268,9 @@ function launchTrial() {
   state.selected = new Set();
   lastSampleT = 0;
 
-  // Show initial positions
-  const initPos = interpolate(rec.frames, 0).slice(0, trial.nTotal);
+  // Show initial positions (rotated)
+  const rot0 = trial.rotation || 0;
+  const initPos = interpolate(rec.frames, 0).slice(0, trial.nTotal).map(b => rotatePos(b, rot0));
   renderBalls(initPos, PH.MEMORISE);
   updateTrialLabel();
   setPhase(PH.MEMORISE);
@@ -299,7 +308,8 @@ function trackFrame(ts) {
   // Advance playback
   state.playT = Math.min(state.playT + wallDt * trial.speedMult, trial.recSpan);
   const allPos = interpolate(rec.frames, state.playT);
-  const vis = allPos.slice(0, trial.nTotal);
+  const rot = trial.rotation || 0;
+  const vis = allPos.slice(0, trial.nTotal).map(b => rotatePos(b, rot));
   const tgts = vis.filter(b => b.id < N_TARGETS);
   const dsts = vis.filter(b => b.id >= N_TARGETS);
 
@@ -619,6 +629,19 @@ function getDims() {
   return { w, h, cx: w/2, cy: h/2, sx, sy };
 }
 
+// Rotate a position in recording space around its centre (REC_W/2, REC_H/2)
+// Returns new position still in recording space
+function rotatePos(b, deg) {
+  if (!deg) return b;
+  const cx = REC_W / 2, cy = REC_H / 2;
+  const dx = b.x - cx, dy = b.y - cy;
+  let rx, ry;
+  if (deg === 90)  { rx =  dy; ry = -dx; }
+  else if (deg === 180) { rx = -dx; ry = -dy; }
+  else              { rx = -dy; ry =  dx; }  // 270
+  return { ...b, x: cx + rx, y: cy + ry };
+}
+
 // Scale a recording-space position to canvas space
 function scalePos(b) {
   const { sx, sy } = getDims();
@@ -637,7 +660,7 @@ function currentTrial() { return state.trials[state.trialIdx]; }
 function updateTrialLabel() {
   const t = currentTrial();
   if (!t) return;
-  trialLabel.textContent = `${state.trialIdx+1}/${state.trials.length} · ${t.speedMult}× · ${t.nDistractors}d`;
+  trialLabel.textContent = `${state.trialIdx+1}/${state.trials.length} · ${t.speedMult}× · ${t.nDistractors}d · ${t.rotation}°`;
 }
 
 function updateTimeLabel() {
@@ -682,19 +705,20 @@ function exportAll() {
   const log = state.trialLog;
 
   // Trials
-  const tH = 'trial_id,rec_name,speed_mult,speed_px,n_distractors,n_total,score,missed,mean_load,peak_load,mean_amb_bouma,pct_below_crit,play_duration\n';
+  const tH = 'trial_id,rec_name,speed_mult,speed_px,n_distractors,n_total,rotation,score,missed,mean_load,peak_load,mean_amb_bouma,pct_below_crit,play_duration\n';
   const tR = log.map(t => [
     t.trial_id, t.rec_name, t.speedMult, t.speedPx, t.nDistractors, t.nTotal,
+    t.rotation || 0,
     t.score.toFixed(3), t.missed, t.meanLoad.toFixed(3), t.peakLoad.toFixed(3),
     t.meanAmbBouma.toFixed(3), t.pctBelowCrit.toFixed(3), t.playDuration.toFixed(1),
   ].join(',')).join('\n');
   dlCSV(tH + tR, 'mot_trials.csv');
 
   // Events
-  const eH = 'trial_id,rec_name,speed_mult,n_distractors,outcome,tgt_id,dst_id,min_bouma,min_t,t_start,t_end\n';
+  const eH = 'trial_id,rec_name,speed_mult,n_distractors,rotation,outcome,tgt_id,dst_id,min_bouma,min_t,t_start,t_end\n';
   const eR = log.flatMap(t => t.nearMisses.map(e => [
     t.trial_id, t.rec_name, t.speedMult, t.nDistractors,
-    e.outcome, e.tgtId ?? '', e.dstId ?? '',
+    t.rotation || 0, e.outcome, e.tgtId ?? '', e.dstId ?? '',
     e.minBouma?.toFixed(3) ?? '', e.minT?.toFixed(2) ?? '',
     e.tStart?.toFixed(2) ?? '', e.tEnd?.toFixed(2) ?? '',
   ].join(','))).join('\n');
