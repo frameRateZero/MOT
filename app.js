@@ -481,8 +481,15 @@ function showDone() {
       Export CSVs and feed into analysis.<br>
       Three files: trials · events · timeseries
     </div>
-    <button onclick="exportAll()" style="width:100%;background:#001020;border:1px solid #2a4060;color:#4a8fa8;padding:10px 0;font-size:10px;letter-spacing:3px;cursor:pointer;font-family:'Courier New',monospace;border-radius:3px;">
-      EXPORT ALL CSV
+    <div style="font-size:8px;color:${C.muted};margin-bottom:2px;">
+      One .json bundle (trials + events + timeseries).<br>
+      Run <code style="color:${C.accent}">python3 split_mot.py mot_results_*.json</code> to get three CSVs.
+    </div>
+    <button onclick="exportAll()" style="width:100%;background:#001020;border:1px solid #4a8fa8;color:#4a8fa8;padding:10px 0;font-size:10px;letter-spacing:3px;cursor:pointer;font-family:'Courier New',monospace;border-radius:3px;">
+      EXPORT BUNDLE (.json)
+    </button>
+    <button onclick="exportTrialsCSV()" style="width:100%;background:transparent;border:1px solid ${C.accent};color:${C.accent};padding:8px 0;font-size:9px;letter-spacing:3px;cursor:pointer;font-family:'Courier New',monospace;border-radius:3px;">
+      TRIALS ONLY (.csv) — scores + load
     </button>
     <button onclick="resetSession()" style="width:100%;background:transparent;border:1px solid ${C.muted};color:${C.muted};padding:8px 0;font-size:9px;letter-spacing:3px;cursor:pointer;font-family:'Courier New',monospace;border-radius:3px;">
       NEW SESSION
@@ -694,49 +701,72 @@ function pct(v) { return (v * 100).toFixed(0) + '%'; }
 function outcomeCol(o) { return o==='swap'?C.danger:o==='miss_event'?C.warn:o==='miss_none'?'#9060f0':C.accent; }
 
 // ─── CSV Export ───────────────────────────────────────────────────────────────
-function dlCSV(content, name) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([content], { type: 'text/csv' }));
-  a.download = name;
-  a.click();
-}
+// Safari only allows one programmatic download per user gesture.
+// Everything goes into a single JSON file; a companion Python script
+// splits it into three CSVs offline.
 
 function exportAll() {
   const log = state.trialLog;
+  if (!log.length) { alert('No trials completed yet.'); return; }
 
-  // Trials
-  const tH = 'trial_id,rec_name,speed_mult,speed_px,n_distractors,n_total,rotation,score,missed,mean_load,peak_load,mean_amb_bouma,pct_below_crit,play_duration\n';
-  const tR = log.map(t => [
+  // Build three CSV strings
+  const tH = 'trial_id,rec_name,speed_mult,speed_px,n_distractors,n_total,rotation,score,missed,mean_load,peak_load,mean_amb_bouma,pct_below_crit,play_duration';
+  const trialsCSV = [tH, ...log.map(t => [
     t.trial_id, t.rec_name, t.speedMult, t.speedPx, t.nDistractors, t.nTotal,
     t.rotation || 0,
     t.score.toFixed(3), t.missed, t.meanLoad.toFixed(3), t.peakLoad.toFixed(3),
     t.meanAmbBouma.toFixed(3), t.pctBelowCrit.toFixed(3), t.playDuration.toFixed(1),
-  ].join(',')).join('\n');
-  dlCSV(tH + tR, 'mot_trials.csv');
+  ].join(','))].join('\n');
 
-  // Events
-  const eH = 'trial_id,rec_name,speed_mult,n_distractors,rotation,outcome,tgt_id,dst_id,min_bouma,min_t,t_start,t_end\n';
-  const eR = log.flatMap(t => t.nearMisses.map(e => [
+  const eH = 'trial_id,rec_name,speed_mult,n_distractors,rotation,outcome,tgt_id,dst_id,min_bouma,min_t,t_start,t_end';
+  const eventsCSV = [eH, ...log.flatMap(t => t.nearMisses.map(e => [
     t.trial_id, t.rec_name, t.speedMult, t.nDistractors,
     t.rotation || 0, e.outcome, e.tgtId ?? '', e.dstId ?? '',
     e.minBouma?.toFixed(3) ?? '', e.minT?.toFixed(2) ?? '',
     e.tStart?.toFixed(2) ?? '', e.tEnd?.toFixed(2) ?? '',
-  ].join(','))).join('\n');
-  dlCSV(eH + eR, 'mot_events.csv');
+  ].join(',')))].join('\n');
 
-  // Time series
-  const tsH = 'trial_id,rec_name,speed_mult,n_distractors,t,ambient_bouma,load,speed_comp,crowd_press\n';
-  const tsR = log.flatMap(t => (t.timeSeries || []).map(f => [
-    t.trial_id, t.rec_name, t.speedMult, t.nDistractors,
+  const tsH = 'trial_id,rec_name,speed_mult,n_distractors,rotation,t,ambient_bouma,load,speed_comp,crowd_press';
+  const timeseriesCSV = [tsH, ...log.flatMap(t => (t.timeSeries || []).map(f => [
+    t.trial_id, t.rec_name, t.speedMult, t.nDistractors, t.rotation || 0,
     f.t.toFixed(2), f.ambientBouma.toFixed(3), f.load.toFixed(3),
     f.speedComp.toFixed(3), f.crowdPress.toFixed(3),
-  ].join(','))).join('\n');
-  dlCSV(tsH + tsR, 'mot_timeseries.csv');
+  ].join(',')))].join('\n');
+
+  // Pack all three into one JSON blob — one download, always works in Safari
+  const bundle = JSON.stringify({ trials: trialsCSV, events: eventsCSV, timeseries: timeseriesCSV }, null, 0);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([bundle], { type: 'application/json' }));
+  a.download = `mot_results_${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// Also expose individual CSV download for direct use if needed
+function exportTrialsCSV() {
+  const log = state.trialLog;
+  if (!log.length) return;
+  const tH = 'trial_id,rec_name,speed_mult,speed_px,n_distractors,n_total,rotation,score,missed,mean_load,peak_load,mean_amb_bouma,pct_below_crit,play_duration';
+  const rows = log.map(t => [
+    t.trial_id, t.rec_name, t.speedMult, t.speedPx, t.nDistractors, t.nTotal,
+    t.rotation || 0,
+    t.score.toFixed(3), t.missed, t.meanLoad.toFixed(3), t.peakLoad.toFixed(3),
+    t.meanAmbBouma.toFixed(3), t.pctBelowCrit.toFixed(3), t.playDuration.toFixed(1),
+  ].join(','));
+  const content = [tH, ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type: 'text/csv' }));
+  a.download = 'mot_trials.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 // Expose globally for onclick handlers
 window.nextTrial = nextTrial;
 window.exportAll = exportAll;
+window.exportTrialsCSV = exportTrialsCSV;
 window.resetSession = resetSession;
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
